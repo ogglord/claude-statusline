@@ -130,7 +130,64 @@ if [ -f "$settings_path" ]; then
     effort=$(jq -r '.effortLevel // "default"' "$settings_path" 2>/dev/null)
 fi
 
-# ── LINE 1: Model │ Context % │ Directory (branch) │ Session │ Effort ──
+# ── ccode proxy detection ────────────────────────────────
+# Shows provider name when ccode is wrapping this instance, hidden otherwise.
+ccode_label=""
+if [[ -n "$ANTHROPIC_BASE_URL" && "$ANTHROPIC_BASE_URL" == *"127.0.0.1"* ]]; then
+    ccode_port="${ANTHROPIC_BASE_URL##*:}"
+    if [[ "$ccode_port" =~ ^[0-9]+$ ]]; then
+        pid_dir="/tmp/ccode-${UID}/pid"
+        if [[ -d "$pid_dir" ]]; then
+            for f in "$pid_dir"/*.json; do
+                [[ -f "$f" && ! -L "$f" ]] || continue
+                pid="${f##*/}"; pid="${pid%.json}"
+                [[ -d "/proc/$pid" ]] || continue
+                profile=""; host=""; file_port=""
+                while IFS= read -r line; do
+                    [[ "$line" == *'"profile_name"'* ]] && { profile="${line#*: \"}"; profile="${profile%\"*}"; }
+                    [[ "$line" == *'"upstream_host"'* ]] && { host="${line#*: \"}"; host="${host%\"*}"; }
+                    [[ "$line" == *'"port"'* ]] && { file_port="${line#*: }"; file_port="${file_port%,*}"; file_port="${file_port//[[:space:]]/}"; }
+                done < "$f"
+                [[ -n "$profile" && "$file_port" == "$ccode_port" ]] || continue
+                # Map host to a friendly provider label
+                case "$host" in
+                    *anthropic*) ccode_label="Anthropic" ;;
+                    *deepseek*)  ccode_label="DeepSeek" ;;
+                    *openai*|*azure*) ccode_label="OpenAI" ;;
+                    *google*|*gemini*) ccode_label="Google" ;;
+                    *)           ccode_label="${host%%.*}" ;;
+                esac
+                break
+            done
+        fi
+    fi
+fi
+
+# ── Caveman mode badge (inlined from caveman-statusline.sh) ──
+caveman_badge=""
+caveman_flag="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/.caveman-active"
+if [[ -f "$caveman_flag" && ! -L "$caveman_flag" ]]; then
+    caveman_mode=$(head -c 64 "$caveman_flag" 2>/dev/null | tr -d '\n\r' | tr '[:upper:]' '[:lower:]')
+    caveman_mode=$(printf '%s' "$caveman_mode" | tr -cd 'a-z0-9-')
+    case "$caveman_mode" in
+        off|lite|full|ultra|wenyan-lite|wenyan|wenyan-full|wenyan-ultra|commit|review|compress)
+            if [[ -z "$caveman_mode" || "$caveman_mode" == "full" ]]; then
+                caveman_badge='\033[38;5;172m[CAVEMAN]\033[0m'
+            else
+                suffix=$(printf '%s' "$caveman_mode" | tr '[:lower:]' '[:upper:]')
+                caveman_badge="\033[38;5;172m[CAVEMAN:${suffix}]\033[0m"
+            fi
+            # Append savings suffix if available
+            savings_file="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/.caveman-statusline-suffix"
+            if [[ -f "$savings_file" && ! -L "$savings_file" ]]; then
+                savings=$(head -c 64 "$savings_file" 2>/dev/null | tr -d '\000-\037')
+                [[ -n "$savings" ]] && caveman_badge+=" \033[38;5;172m${savings}\033[0m"
+            fi
+            ;;
+    esac
+fi
+
+# ── LINE 1: Model │ [ccode] │ Context % │ Directory (branch) │ Session │ [CAVEMAN] │ Effort ──
 pct_color=$(color_for_pct "$pct_used")
 cwd=$(echo "$input" | jq -r '.cwd // ""')
 [ -z "$cwd" ] || [ "$cwd" = "null" ] && cwd=$(pwd)
@@ -169,6 +226,10 @@ if [[ "$parent_cmd" == *"--dangerously-skip-permissions"* ]]; then
 fi
 
 line1="${blue}${model_name}${reset}"
+if [ -n "$ccode_label" ]; then
+    line1+="${sep}"
+    line1+="${dim}via${reset} ${magenta}${ccode_label}${reset}"
+fi
 line1+="${sep}"
 line1+="✍️ ${pct_color}${pct_used}%${reset}"
 line1+="${sep}"
@@ -179,6 +240,10 @@ fi
 if [ -n "$session_duration" ]; then
     line1+="${sep}"
     line1+="${dim}⏱ ${reset}${white}${session_duration}${reset}"
+fi
+if [ -n "$caveman_badge" ]; then
+    line1+="${sep}"
+    line1+="$(printf '%b' "$caveman_badge")"
 fi
 line1+="${sep}"
 case "$effort" in
