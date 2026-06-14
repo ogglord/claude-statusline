@@ -58,14 +58,13 @@ format_epoch_time() {
     local result=""
     case "$style" in
         time)
-            result=$(date -j -r "$epoch" +"%l:%M%p" 2>/dev/null)
-            [ -z "$result" ] && result=$(date -d "@$epoch" +"%l:%M%P" 2>/dev/null)
-            result=$(echo "$result" | sed 's/^ //; s/\.//g' | tr '[:upper:]' '[:lower:]')
+            result=$(date -j -r "$epoch" +"%H:%M" 2>/dev/null)
+            [ -z "$result" ] && result=$(date -d "@$epoch" +"%H:%M" 2>/dev/null)
             ;;
         datetime)
-            result=$(date -j -r "$epoch" +"%b %-d, %l:%M%p" 2>/dev/null)
-            [ -z "$result" ] && result=$(date -d "@$epoch" +"%b %-d, %l:%M%P" 2>/dev/null)
-            result=$(echo "$result" | sed 's/  / /g; s/^ //; s/\.//g' | tr '[:upper:]' '[:lower:]')
+            result=$(date -j -r "$epoch" +"%b %-d, %H:%M" 2>/dev/null)
+            [ -z "$result" ] && result=$(date -d "@$epoch" +"%b %-d, %H:%M" 2>/dev/null)
+            result=$(echo "$result" | sed 's/  / /g')
             ;;
         *)
             result=$(date -j -r "$epoch" +"%b %-d" 2>/dev/null)
@@ -264,9 +263,9 @@ stdin_five_pct=$(echo "$input" | jq -r '.rate_limits.five_hour.used_percentage /
 if [ -n "$stdin_five_pct" ]; then
     has_stdin_rates=true
     five_hour_pct=$(printf "%.0f" "$stdin_five_pct")
-    five_hour_reset_epoch=$(echo "$input" | jq -r '.rate_limits.five_hour.resets_at // empty')
+    five_hour_reset_epoch=$(iso_to_epoch "$(echo "$input" | jq -r '.rate_limits.five_hour.resets_at // empty')")
     seven_day_pct=$(echo "$input" | jq -r '.rate_limits.seven_day.used_percentage // empty' | awk '{printf "%.0f", $1}')
-    seven_day_reset_epoch=$(echo "$input" | jq -r '.rate_limits.seven_day.resets_at // empty')
+    seven_day_reset_epoch=$(iso_to_epoch "$(echo "$input" | jq -r '.rate_limits.seven_day.resets_at // empty')")
 fi
 
 # ── Fallback: API call (cached) ────────────────────────
