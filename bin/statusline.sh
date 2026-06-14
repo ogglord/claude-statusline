@@ -130,37 +130,48 @@ if [ -f "$settings_path" ]; then
 fi
 
 # ── ccode proxy detection ────────────────────────────────
-# Shows provider name when ccode is wrapping this instance, hidden otherwise.
+# Reads /tmp/ccode-<uid>/session-<port>.json written by ccode on profile switch.
+# Falls back to scanning pid files for older ccode versions.
 ccode_label=""
 if [[ -n "$ANTHROPIC_BASE_URL" && "$ANTHROPIC_BASE_URL" == *"127.0.0.1"* ]]; then
     ccode_port="${ANTHROPIC_BASE_URL##*:}"
     if [[ "$ccode_port" =~ ^[0-9]+$ ]]; then
-        pid_dir="/tmp/ccode-$(id -u)/pid"
-        if [[ -d "$pid_dir" ]]; then
-            set +f
-            for f in "$pid_dir"/*.json; do
-                [[ -f "$f" && ! -L "$f" ]] || continue
-                pid="${f##*/}"; pid="${pid%.json}"
-                [[ -d "/proc/$pid" ]] || continue
-                profile=""; host=""; file_port=""
-                while IFS= read -r line; do
-                    [[ "$line" == *'"profile_name"'* ]] && { profile="${line#*: \"}"; profile="${profile%\"*}"; }
-                    [[ "$line" == *'"upstream_host"'* ]] && { host="${line#*: \"}"; host="${host%\"*}"; }
-                    [[ "$line" == *'"port"'* ]] && { file_port="${line#*: }"; file_port="${file_port%,*}"; file_port="${file_port//[[:space:]]/}"; }
-                done < "$f"
-                [[ -n "$profile" && "$file_port" == "$ccode_port" ]] || continue
-                # Map host to a friendly provider label
-                case "$host" in
-                    *anthropic*) ccode_label="Anthropic" ;;
-                    *deepseek*)  ccode_label="DeepSeek" ;;
-                    *openai*|*azure*) ccode_label="OpenAI" ;;
-                    *google*|*gemini*) ccode_label="Google" ;;
-                    *)           ccode_label="${host%%.*}" ;;
-                esac
-                break
-            done
-            set -f
+        ccode_host=""
+        session_file="/tmp/ccode-$(id -u)/session-${ccode_port}.json"
+        if [[ -f "$session_file" && ! -L "$session_file" ]]; then
+            # Fast path: port-keyed session file (current ccode)
+            ccode_host=$(jq -r '.upstream_host // empty' "$session_file" 2>/dev/null)
+        else
+            # Fallback: scan pid files (older ccode)
+            pid_dir="/tmp/ccode-$(id -u)/pid"
+            if [[ -d "$pid_dir" ]]; then
+                set +f
+                for f in "$pid_dir"/*.json; do
+                    [[ -f "$f" && ! -L "$f" ]] || continue
+                    pid="${f##*/}"; pid="${pid%.json}"
+                    [[ -d "/proc/$pid" ]] || continue
+                    profile=""; host=""; file_port=""
+                    while IFS= read -r line; do
+                        [[ "$line" == *'"profile_name"'* ]] && { profile="${line#*: \"}"; profile="${profile%\"*}"; }
+                        [[ "$line" == *'"upstream_host"'* ]] && { host="${line#*: \"}"; host="${host%\"*}"; }
+                        [[ "$line" == *'"port"'* ]] && { file_port="${line#*: }"; file_port="${file_port%,*}"; file_port="${file_port//[[:space:]]/}"; }
+                    done < "$f"
+                    [[ -n "$profile" && "$file_port" == "$ccode_port" ]] || continue
+                    ccode_host="$host"
+                    break
+                done
+                set -f
+            fi
         fi
+        # Map host to a friendly provider label
+        case "$ccode_host" in
+            *anthropic*) ccode_label="Anthropic" ;;
+            *deepseek*)  ccode_label="DeepSeek" ;;
+            *openai*|*azure*) ccode_label="OpenAI" ;;
+            *google*|*gemini*) ccode_label="Google" ;;
+            "")          ;;
+            *)           ccode_label="${ccode_host%%.*}" ;;
+        esac
     fi
 fi
 
