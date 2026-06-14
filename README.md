@@ -1,5 +1,7 @@
 # claude-statusline
 
+> **Fork** of [@kamranahmedse/claude-statusline](https://github.com/kamranahmedse/claude-statusline) with opinionated customizations. Maintained independently.
+
 Configure your Claude Code statusline to show limits, directory and git info
 
 ![demo](./.github/demo.png)
@@ -9,7 +11,7 @@ Configure your Claude Code statusline to show limits, directory and git info
 Run the command below to set it up
 
 ```bash
-npx @kamranahmedse/claude-statusline
+npx @ogglord/claude-statusline
 ```
 
 It backups your old status line if any and copies the status line script to `~/.claude/statusline.sh` and configures your Claude Code settings.
