@@ -137,6 +137,7 @@ if [[ -n "$ANTHROPIC_BASE_URL" && "$ANTHROPIC_BASE_URL" == *"127.0.0.1"* ]]; the
     if [[ "$ccode_port" =~ ^[0-9]+$ ]]; then
         pid_dir="/tmp/ccode-$(id -u)/pid"
         if [[ -d "$pid_dir" ]]; then
+            set +f
             for f in "$pid_dir"/*.json; do
                 [[ -f "$f" && ! -L "$f" ]] || continue
                 pid="${f##*/}"; pid="${pid%.json}"
@@ -158,6 +159,7 @@ if [[ -n "$ANTHROPIC_BASE_URL" && "$ANTHROPIC_BASE_URL" == *"127.0.0.1"* ]]; the
                 esac
                 break
             done
+            set -f
         fi
     fi
 fi
