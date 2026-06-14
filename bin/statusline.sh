@@ -135,7 +135,7 @@ ccode_label=""
 if [[ -n "$ANTHROPIC_BASE_URL" && "$ANTHROPIC_BASE_URL" == *"127.0.0.1"* ]]; then
     ccode_port="${ANTHROPIC_BASE_URL##*:}"
     if [[ "$ccode_port" =~ ^[0-9]+$ ]]; then
-        pid_dir="/tmp/ccode-${UID}/pid"
+        pid_dir="/tmp/ccode-$(id -u)/pid"
         if [[ -d "$pid_dir" ]]; then
             for f in "$pid_dir"/*.json; do
                 [[ -f "$f" && ! -L "$f" ]] || continue
